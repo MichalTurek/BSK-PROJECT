@@ -13,21 +13,17 @@ from Crypto.Protocol.KDF import PBKDF2
 import hashlib
 from client import Client
 from server import Server
+import asyncio
 import threading
-import time
-import random
+
+
 def open_file():
-    text_transfer_file.set("loading...")
-    file = askopenfile(parent=root, mode='rb', title="Choose a file")
+    global client
+    file = tk.filedialog.askopenfile(mode='r')
     if file:
-        
+        filepath = os.path.abspath(file.name)
+        client.send_file(filepath)
 
-        file_btn.set("Browse")
-    text_transfer_file.set("send file")
-
-def send_message():
-    print(text_input.get(1.0, "end-1c"))
-    pass 
 
 def check_if_keys_exist():
     popup = tk.Toplevel()
@@ -39,8 +35,9 @@ def check_if_keys_exist():
     folder_selected = tk.filedialog.askdirectory()
     if not os.path.exists(folder_selected+"public_key.pem") or not os.path.exists(folder_selected+"private_key.pem"):
         generate_keys_new(folder_selected)
-    return folder_selected
     popup.destroy()
+    return folder_selected
+    
 def generate_keys_new(folder_selected):
     passcode = "kutasek"
     key = RSA.generate(2048)
@@ -82,24 +79,13 @@ def check_password(keys_path):
     pass
 def create_server():
     global server, public_key, recv_text, mylabel
-
-    # TO TEST IF WORKS
-    number = 0
-    while True:
-        if number == 10:
-            return
-        number = random.randint(1, 100)
-        mylabel.config(text=f'hejka naklejka{number}')
-        time.sleep(0.3)
-    return
-    server = Server('localhost', 9999)
-    public_key = server.receive_key()       #TODO add session key receiving
-
+    recv_text = ''
     while True:
         text = server.receive_text_from_client()
 
         if text == "send_text":
             txt = server.receive_text_from_client()
+            print(txt)
             recv_text += f'{txt}\n'
             mylabel.config(text=recv_text) # update te messagebox
             #print(recv_text)
@@ -111,6 +97,7 @@ def create_server():
             return # text == '' when connection is lost
         
 def check_address(text, window=None):
+    global addr, port
     try:
         text.index(':')
     except ValueError:
@@ -120,22 +107,67 @@ def check_address(text, window=None):
         print(text)
         if window is not None:
             window.destroy()
-        create_client(text[0], int(text[1]))
+        addr, port = text[0], int(text[1])
+        
+        
 
-def create_client(addr, port):
-    global client, connected
+def generate_session_key(public_key):
+    return "public_session_key"
+
+def server_accept():
+    global server, mylabel
+    mylabel.config(text='accepting')
+    server.server.listen()
+    server.client, server.addr = server.server.accept()
+    return
+
+async def create_client():
+    global client, connected, server, key_folder, session_key, mylabel, addr, port
 
     client = Client(addr, port)
+    mylabel.config(text='create client')
+    server = Server('localhost', 9999)
+    thread1 = threading.Thread(target=server_accept, args=())
+    thread1.start()
+    #mylabel.config(text='dalej')
     while True:
         try:
+            #mylabel.config(text=f'try catch {addr}:{port}')
             client.client.connect((addr, port))
         except ConnectionRefusedError:
             continue
         else:
+            
+            mylabel.config(text='else statement!')
+            thread1.join()
+            mylabel.config(text='after join')
+            #time.sleep(5)
             #when connected successfully change status to connected
             #do it here
             #-------------------#
+            task = asyncio.create_task(server.receive_key())
+            
+            key = "public key 1"
+            # with open(key_folder, 'r') as f:      $uncomment and pass the file with
+            #     key = f.read()
+            client.send_key(key)
+            mylabel.config(text='siema')
+            public_key = await task 
+            print(public_key)
+            mylabel.config(text=public_key)
+
+            task = asyncio.create_task(server.receive_key())
+            session_key = generate_session_key(public_key)
+            client.send_key(session_key)
+
+            sk = await task
+            mylabel.config(text=f'')
+            print(sk)
+            if not sk == '':
+                session_key = sk
+
             connected = True
+            connection.config(text=f'Status: {connected}')
             #client.send_key() #send encrypted public key
             #meanwhile server retrieves public key
             return
@@ -153,18 +185,30 @@ def connect():
     popup.attributes('-topmost',True)
     popup.grab_set()
     popup.mainloop()
-    #create_client(text_input.get("1.0", "end-1c"), popup)
 
 def client_handler():
-    global client
+    global addr, port, connected, mylabel
     connect()
     while True:
-        if not connected:
-            client = create_client(client.send_address, client.port)
+        asyncio.run(create_client())
+        #mylabel.config(text='eluwina')
+        t1 = threading.Thread(target=create_server, args=(), daemon=True)
+        t1.start()
+        t1.join()
+    #mylabel.config(text='before client_handler while')
+    
+        #mylabel.config(text='client_handler while')
+        # if not connected:
+        #     if t1.is_alive():
+        #         t1.join()
+        #     asyncio.run(create_client())
+        #     t1 = threading.Thread(target=create_server, args=(), daemon=True)
+        #     t1.start()
+            
 
 
 def main():
-    global mylabel, client, server, connected, session_key
+    global mylabel, client, server, connected, session_key, key_folder, connection
     connected = False
 
 
@@ -195,21 +239,21 @@ def main():
     file_btn = tk.Button(root, text='send file', command=lambda:open_file(), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
     file_btn.grid(column=1, row=2)
     #message tranfer button
-    message_btn = tk.Button(root, text='send message', command=lambda:send_message(), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
+    message_btn = tk.Button(root, text='send message', command=lambda:client.send_text(text_input.get("1.0", "end-1c")), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
     message_btn.grid(column=1,row=5)
     #field to show received text
     mylabel = tk.Label(root, text=f"messages:", font="Raleway")
     mylabel.grid(columnspan=3, column=0, row=6)
 
     #connection status
-    connection = tk.Label(root, text=f"Status: {connected}", font="Raleway")
+    connection = tk.Label(root, text=f"Connected: {connected}", font="Raleway")
     connection.grid(columnspan=3, column=0, row=10)
 
     canvas = tk.Canvas(root, width=600, height=250)
     canvas.grid(columnspan=3)
 
-    t1 = threading.Thread(target=create_server, args=(), daemon=True) #watki sa usuwane przy zakonczeniu programu
-    t1.start()
+    # t1 = threading.Thread(target=create_server, args=(), daemon=True) #watki sa usuwane przy zakonczeniu programu
+    # t1.start()
     t2 = threading.Thread(target=lambda:client_handler(), args=(), daemon=True)
     t2.start()
     

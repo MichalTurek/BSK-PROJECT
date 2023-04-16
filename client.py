@@ -33,7 +33,7 @@ class Client():
                     progress.update(1024)
                     break
    
-                time.sleep(0.3)
+                time.sleep(0.08)
                 self.client.send(data[:packet_size])
                 progress.update(1024)
                 data = data[packet_size:]
