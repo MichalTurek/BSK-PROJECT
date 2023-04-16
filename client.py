@@ -6,8 +6,8 @@ import time
 class Client():
     def __init__(self, address, port):
         self.send_address = address
+        self.port = port
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.connect((self.send_address, port))
     
     def send_text(self, text):
         self.client.send("send_text".encode())

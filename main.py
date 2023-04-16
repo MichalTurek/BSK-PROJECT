@@ -1,27 +1,25 @@
 import tkinter as tk
-import PyPDF2
 from PIL import Image, ImageTk
 from tkinter.filedialog import askopenfile
 import os 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+from client import Client
+from server import Server
+import threading
+import time
+import random
+
 def open_file():
     text_transfer_file.set("loading...")
-    file = askopenfile(parent=root, mode='rb', title="Choose a file", filetypes=[("Pdf file", "*.pdf")])
+    file = askopenfile(parent=root, mode='rb', title="Choose a file")
     if file:
-        read_pdf = PyPDF2.PdfFileReader(file)
-        page = read_pdf.getPage(0)
-        page_content = page.extractText()
-        #text box
-        text_box = tk.Text(root, height=10, width=50, padx=15, pady=15)
-        text_box.insert(1.0, page_content)
-        text_box.tag_configure("center", justify="center")
-        text_box.tag_add("center", 1.0, "end")
-        text_box.grid(column=1, row=3)
+        
 
         file_btn.set("Browse")
     text_transfer_file.set("send file")
+
 def send_message():
     print(text_input.get(1.0, "end-1c"))
     pass 
@@ -37,6 +35,7 @@ def check_if_keys_exist():
     if not os.path.exists(folder_selected+"public_key.pem") or not os.path.exists(folder_selected+"private_key.pem"):
         generate_keys(folder_selected)
     popup.destroy()
+
 def generate_keys(folder_selected):
     private_key = rsa.generate_private_key(
         public_exponent=65537,
@@ -56,32 +55,102 @@ def generate_keys(folder_selected):
         format=serialization.PublicFormat.SubjectPublicKeyInfo)
     with open(folder_selected +'/public_key.pem', 'wb') as f:
         f.write(pem)
-def eryk_connect():
-    pass
+
+def create_server():
+    global server, public_key, recv_text, mylabel
+
+    # TO TEST IF WORKS
+    number = 0
+    while True:
+        if number == 10:
+            return
+        number = random.randint(1, 100)
+        mylabel.config(text=f'hejka naklejka{number}')
+        time.sleep(0.3)
+    return
+    server = Server('localhost', 9999)
+    public_key = server.receive_key()       #TODO add session key receiving
+
+    while True:
+        text = server.receive_text_from_client()
+
+        if text == "send_text":
+            txt = server.receive_text_from_client()
+            recv_text += f'{txt}\n'
+            mylabel.config(text=recv_text) # update te messagebox
+            #print(recv_text)
+        
+        elif text == "send_file":
+            server.receive_file_from_client()
+
+        elif text == "":
+            return # text == '' when connection is lost
+        
+def check_address(text, window=None):
+    try:
+        text.index(':')
+    except ValueError:
+        return
+    else:
+        text = text.split(':')
+        print(text)
+        if window is not None:
+            window.destroy()
+        create_client(text[0], int(text[1]))
+
+def create_client(addr, port):
+    global client, connected
+
+    client = Client(addr, port)
+    while True:
+        try:
+            client.client.connect((addr, port))
+        except ConnectionRefusedError:
+            continue
+        else:
+            #when connected successfully change status to connected
+            #do it here
+            #-------------------#
+            connected = True
+            #client.send_key() #send encrypted public key
+            #meanwhile server retrieves public key
+            return
+ 
+    
+
 def connect():
-    connected = False
-    popup = tk.Toplevel()
+    popup = tk.Tk()
     info = tk.Label(popup, text="Give another user address:", font="Raleway")
     info.grid(columnspan=3, column=1, row=0)
     text_input = tk.Text(popup,height = 1,width = 20)
     text_input.grid(columnspan=3,column=1, row=1)
-    text_transfer_file = tk.StringVar()
-    file_btn = tk.Button(popup, textvariable=text_transfer_file, command=lambda:eryk_connect(), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
-    text_transfer_file.set("connect")
+    file_btn = tk.Button(popup, text='connect', command=lambda: check_address(text_input.get("1.0", "end-1c"), window=popup), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
     file_btn.grid(columnspan=3,column=1, row=2)
     popup.attributes('-topmost',True)
     popup.grab_set()
+    popup.mainloop()
+    #create_client(text_input.get("1.0", "end-1c"), popup)
 
-    
-if __name__ == '__main__':
-   
-    
+def client_handler():
+    global client
+    connect()
+    while True:
+        if not connected:
+            client = create_client(client.send_address, client.port)
+
+
+def main():
+    global mylabel, client, server, connected, session_key
+    connected = False
+
+
     root = tk.Tk()
     canvas = tk.Canvas(root, width=500, height=300)
     root.withdraw()
     check_if_keys_exist()
-    connect()
+
     root.deiconify()
+
     canvas.grid(columnspan=10, rowspan=10)
     #logo
     logo = Image.open('logo.png')
@@ -93,24 +162,36 @@ if __name__ == '__main__':
     instructions = tk.Label(root, text="Select file to transfer", font="Raleway")
     instructions.grid(columnspan=3, column=0, row=1)
     #message fransfer text
-    instructions = tk.Label(root, text="write your message", font="Raleway")
-    instructions.grid(columnspan=3, column=0, row=3)
+    instructions2 = tk.Label(root, text="write your message", font="Raleway")
+    instructions2.grid(columnspan=3, column=0, row=3)
     text_input = tk.Text(root,height = 5,
                     width = 20)
     text_input.grid(columnspan=3,column=0, row=4)
     #file transfer button 
-    text_transfer_file = tk.StringVar()
-    file_btn = tk.Button(root, textvariable=text_transfer_file, command=lambda:open_file(), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
-    text_transfer_file.set("send file")
+    file_btn = tk.Button(root, text='send file', command=lambda:open_file(), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
     file_btn.grid(column=1, row=2)
     #message tranfer button
-    text_transfer_message = tk.StringVar()
-    message_btn = tk.Button(root, textvariable=text_transfer_message, command=lambda:send_message(), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
-    text_transfer_message.set("send message")
+    message_btn = tk.Button(root, text='send message', command=lambda:send_message(), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
     message_btn.grid(column=1,row=5)
+    #field to show received text
+    mylabel = tk.Label(root, text=f"messages:", font="Raleway")
+    mylabel.grid(columnspan=3, column=0, row=6)
+
+    #connection status
+    connection = tk.Label(root, text=f"Status: {connected}", font="Raleway")
+    connection.grid(columnspan=3, column=0, row=10)
 
     canvas = tk.Canvas(root, width=600, height=250)
     canvas.grid(columnspan=3)
 
+    t1 = threading.Thread(target=create_server, args=(), daemon=True) #watki sa usuwane przy zakonczeniu programu
+    t1.start()
+    t2 = threading.Thread(target=lambda:client_handler(), args=(), daemon=True)
+    t2.start()
     
     root.mainloop()
+
+
+if __name__ == '__main__':
+    main()
+    
