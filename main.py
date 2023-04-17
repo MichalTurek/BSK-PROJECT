@@ -71,7 +71,7 @@ def check_if_keys_exist():
     return folder_selected
     
 def generate_keys_new(folder_selected):
-    passcode = "kutasek"
+    passcode = "admin123"
     key = RSA.generate(2048)
     #generate private
     private_key = key.export_key()
