@@ -2,14 +2,13 @@ import socket
 import tqdm
 import os
 import time
+import asyncio
 
 class Server():
     def __init__(self, address, port):
         self.recv_address = address
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.bind((self.recv_address, port))
-        self.server.listen()
-        self.client, self.addr = self.server.accept()
         #self.key = self.client.recv(1024).decode()
         
     def receive_file_from_client(self):
@@ -27,7 +26,7 @@ class Server():
             else:
                 file_bytes = data
             progress.update(1024)
-            time.sleep(0.3)
+            time.sleep(0.08)
   
         file.write(file_bytes)
         file.close()
@@ -36,6 +35,6 @@ class Server():
         return self.client.recv(1024).decode()
 
     
-    def receive_key(self):
+    async def receive_key(self):
         return self.client.recv(1024).decode()
     
