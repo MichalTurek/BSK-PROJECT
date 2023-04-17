@@ -10,12 +10,15 @@ from Crypto.Random import get_random_bytes
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad
 from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Cipher import PKCS1_OAEP
 import hashlib
 from client import Client
 from server import Server
 import asyncio
 import threading
-
+import time
+import sys
+import random
 
 def open_file():
     global client
@@ -23,8 +26,35 @@ def open_file():
     if file:
         filepath = os.path.abspath(file.name)
         client.send_file(filepath)
+        file_btn.set("Browse")
+    text_transfer_file.set("send file")
 
+def send_message():
+    print(text_input.get(1.0, "end-1c"))
+    pass 
+def password_handle(keys_path):
+    popup = tk.Tk()
+    info = tk.Label(popup, text="Input password:", font="Raleway")
+    info.grid(columnspan=3, column=1, row=0)
+    text_input = tk.Text(popup,height = 1,width = 20)
+    text_input.grid(columnspan=3,column=1, row=1)
+    pass_btn = tk.Button(popup, text='check',  command=lambda: check_password(keys_path,text_input.get("1.0", "end-1c"),popup), font="Raleway", bg="#20bebe", fg="white", height=2, width=15)
+    pass_btn.grid(columnspan=3,column=1, row=2)
 
+def check_password(keys_path,given_pass,window):
+    with open(keys_path+ '/local/local_key.bin', 'rb') as f:
+        hashed_key = f.read()
+    # Verify the hashed key by computing the SHA-256 hash of the original key
+    salt = b'solniczka'
+    key_length = 16
+    given_password_aes = PBKDF2(given_pass,salt,dkLen=key_length)
+    hashed_given_password_aes = hashlib.sha256(given_password_aes).digest()
+    if hashed_given_password_aes == hashed_key:
+        print("Hashed key is valid")
+        window.destroy()
+    else:
+        print("Hashed key is invalid")
+        sys.exit()
 def check_if_keys_exist():
     popup = tk.Toplevel()
     info = tk.Label(popup, text="Select directory that contains public and private key", font="Raleway")
@@ -33,7 +63,9 @@ def check_if_keys_exist():
     popup.attributes('-topmost',True)
     popup.grab_set()
     folder_selected = tk.filedialog.askdirectory()
+    popup.destroy()
     if not os.path.exists(folder_selected+"public_key.pem") or not os.path.exists(folder_selected+"private_key.pem"):
+
         generate_keys_new(folder_selected)
     popup.destroy()
     return folder_selected
@@ -48,8 +80,12 @@ def generate_keys_new(folder_selected):
     #aes key
     salt = b'solniczka'
     key_len = 16
+    #from human password to AES-128 
     local_key = PBKDF2(passcode,salt,dkLen=key_len)
-    
+    #print(local_key)
+    #sha256 hash of AES-128
+    hashed_local_key = hashlib.sha256(local_key).digest()
+    #print(hashed_local_key)
     # Initialize the AES cipher in CBC mode
     cipher = AES.new(local_key, AES.MODE_CBC)
     padded_private_key = pad(private_key, AES.block_size)
@@ -65,18 +101,21 @@ def generate_keys_new(folder_selected):
     if not os.path.exists(folder_selected + '/local/'):
         os.mkdir(folder_selected + '/local/')
     #write keys
-    with open(folder_selected +'/local/local_key.pem', 'wb') as f:
-        f.write(local_key)
+    print("hashedlocal: "+ str(hashed_local_key))
+    with open(folder_selected +'/local/local_key.bin', 'wb') as f:
+        f.write(hashed_local_key)
     with open(folder_selected +'/public/public_key.pem', 'wb') as f:
         f.write(public_key)
     with open(folder_selected +'/private/private_key.pem', 'wb') as f:
         f.write(encrypted_private_key)
-    print(folder_selected)
     return folder_selected
-def check_password(keys_path):
-    with open(keys_path + '/local/local_key.pem','r') as f:
-        print(f.buffer)
-    pass
+def generate_session_key(other_person_public_key):
+    session_key = get_random_bytes(32)
+    # Encrypt the session key using the public key
+    cipher_rsa = PKCS1_OAEP.new(other_person_public_key)
+    encrypted_session_key = cipher_rsa.encrypt(session_key)
+    return encrypted_session_key 
+
 def create_server():
     global server, public_key, recv_text, mylabel
     recv_text = ''
@@ -216,9 +255,10 @@ def main():
     canvas = tk.Canvas(root, width=500, height=300)
     root.withdraw()
     key_folder = check_if_keys_exist()
-    check_password(key_folder)
+    password_handle(key_folder)
     root.deiconify()
-
+    print("ssss")
+    root.iconify()
     canvas.grid(columnspan=10, rowspan=10)
     #logo
     logo = Image.open('logo.png')
