@@ -1,5 +1,6 @@
 import tkinter as tk
 from PIL import Image, ImageTk
+from tkinter.filedialog import askopenfile
 import os 
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
@@ -153,13 +154,14 @@ def create_server():
         text = server.receive_text_from_client()
         txt = ''
         if text == "send_text":
-            mode = server.receive_text_from_client()
+            print(text)
+            mode = server.client.recv(3).decode()
 
             if mode == 'ECB':
                 txt = server.decryptECB(server.receive_encrypted_from_client())
             
             elif mode == 'CBC':
-                iv = server.receive_encrypted_from_client()
+                iv = server.client.recv(16)
                 encrypted = server.receive_encrypted_from_client()
                 txt = server.decryptCBC(iv, encrypted)
                 
@@ -197,7 +199,8 @@ async def create_client():
 
     client = Client(addr, port) #adress and port given in the beggining of the program
                                 #client tries to connect to server exposed on this ip:port
-    server = Server('localhost', 9998)
+    server = Server('192.168.3.3', 9998)
+    print("tworzenie serwera")
     thread1 = threading.Thread(target=server_accept, args=())
     thread1.start()
     while True:
@@ -210,16 +213,16 @@ async def create_client():
 
             task = asyncio.create_task(server.receive_key())
             
-            with open(key_folder + '/public/public_key.pem', 'rb') as f:      #$uncomment and pass the file with
-                key = f.read()
+            #with open(key_folder + '/public/public_key.pem', 'rb') as f:      #$uncomment and pass the file with
+                #key = f.read()
             
-            client.send_key(key)
+            #client.send_key(key)
             public_key = await task 
 
             public_key = RSA.importKey(public_key)
             print(f'PUBLIC KEY: {public_key}')
 
-            task = asyncio.create_task(server.receive_key())
+            #task = asyncio.create_task(server.receive_key())
 
             ### TUTAJ NADAWCA
             session_key, before_cypher = generate_session_key(public_key)
@@ -230,10 +233,10 @@ async def create_client():
             client.session_key = before_cypher
             server.session_key = before_cypher
             ### TUTAJ NADAWCA
-            sk = await task
+            #sk = await task
 
             ### ODBIORCA
-            sk = decypher_session_key(sk)
+            #sk = decypher_session_key(sk)
             #client.session_key = sk
             #server.session_key = sk
 
